@@ -21,14 +21,15 @@ public class FileUtil {
     * @param filePath 文件路径
     */
    public static BigInteger readAndHandleFile(String filePath,int chunkSize) throws IOException {
-      BufferedReader reader = new BufferedReader(new FileReader(filePath));
+      BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(filePath), "UTF-8"));
       char[] buffer = new char[BUFFER_SIZE];
       List<BigInteger> fingerprints = new ArrayList<>();
       int bytesRead;
       while ((bytesRead = reader.read(buffer, 0, BUFFER_SIZE)) != -1) {
          String chunk = new String(buffer, 0, bytesRead);
          // 处理当前分块
-         SimHashUtil.simHash(chunk,chunkSize);
+         //System.out.println(chunk);
+         fingerprints.add(SimHashUtil.simHash(chunk,chunkSize));
       }
       return SimHashUtil.mergeSimHashes(fingerprints);
    }

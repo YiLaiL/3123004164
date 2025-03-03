@@ -7,7 +7,7 @@ package com.yilail.constant;
  */
 public class GlobalConstant {
 
-   public static final int BUFFER_SIZE = 65536;
+   public static final int BUFFER_SIZE = 4096;
    public static final int HASH_BITS = 64;
    public static final int ACCURATE_CHUNK_SIZE = 5;
    public static final int VAGUE_CHUNK_SIZE = 15;
