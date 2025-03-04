@@ -1,6 +1,9 @@
 package com.yilail.util;
 
-import com.huaban.analysis.jieba.JiebaSegmenter;
+import com.hankcs.hanlp.dictionary.CoreSynonymDictionary;
+import com.hankcs.hanlp.dictionary.common.CommonSynonymDictionary;
+import com.hankcs.hanlp.seg.common.Term;
+import com.hankcs.hanlp.tokenizer.StandardTokenizer;
 import com.yilail.GlobalData;
 import org.apache.tika.parser.txt.CharsetDetector;
 
@@ -10,6 +13,7 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+
 import static com.yilail.constant.GlobalConstant.*;
 
 /**
@@ -131,8 +135,8 @@ public class FileUtil {
      * @param chunkSize 分块大小
      */
     public static double compareArticle(String originArticle, String targetArticle, int chunkSize) throws IOException {
-        BigInteger simhash1 = readAndHandleFile(originArticle, chunkSize);
         BigInteger simhash2 = readAndHandleFile(targetArticle, chunkSize);
+        BigInteger simhash1 = readAndHandleFile(originArticle, chunkSize);
         if (simhash1 == null || simhash2 == null) {
             return 0.0;
         }
@@ -159,12 +163,21 @@ public class FileUtil {
      * 对文章进行分词
      * @param article 文章
      */
-    public static List<List<String>> jiebaWordSegmentation(String article, int chunkSize) {
-        JiebaSegmenter segmenter = new JiebaSegmenter();
+    public static List<List<String>> hanlpWordSegmentation(String article, int chunkSize) {
         // 分词
-        List<String> segmentedWords = segmenter.sentenceProcess(article);
+        List<Term> segmentedWords = StandardTokenizer.segment(article);
         // 使用 removeIf 和 lambda 表达式去除停用词
-        segmentedWords.removeIf(GlobalData.getStopWords()::contains);
-        return chunkWords(segmentedWords, chunkSize);
+        segmentedWords.removeIf(term -> GlobalData.getStopWords().contains(term.word));
+        // 替换同义词
+        List<String> replacedText = new ArrayList<>();
+        for (Term segmentedWord : segmentedWords) {
+            String word = segmentedWord.word;
+            CommonSynonymDictionary.SynonymItem synonymItem = CoreSynonymDictionary.get(word);
+            replacedText.add(synonymItem != null && !word.equals(synonymItem.synonymList.get(0).realWord) ?
+                    synonymItem.synonymList.get(0).realWord :
+                    word);
+        }
+        System.out.println(replacedText);
+        return chunkWords(replacedText, chunkSize);
     }
 }

@@ -4,7 +4,6 @@ import java.math.BigInteger;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import static com.yilail.constant.GlobalConstant.HASH_BITS;
 
@@ -22,7 +21,7 @@ public class SimHashUtil {
      * @return 指纹
      */
     public static BigInteger simHash(String text, int chunkSize) {
-        List<List<String>> wordLists = FileUtil.jiebaWordSegmentation(text, chunkSize);
+        List<List<String>> wordLists = FileUtil.hanlpWordSegmentation(text, chunkSize);
         int[] hashBits = new int[HASH_BITS];
         wordLists.forEach(words -> {
             // 计算词频权重
@@ -46,7 +45,7 @@ public class SimHashUtil {
 
         // 生成最终指纹
         BigInteger fingerprint = BigInteger.ZERO;
-        for (int i = 0; i < 64; i++) {
+        for (int i = 0; i < HASH_BITS; i++) {
             if (hashBits[i] > 0) {
                 // 将大于0的位设置为1
                 fingerprint = fingerprint.setBit(i);
