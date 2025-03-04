@@ -2,8 +2,6 @@ package com.yilail.util;
 
 import com.huaban.analysis.jieba.JiebaSegmenter;
 import com.yilail.GlobalData;
-import org.apache.tika.detect.AutoDetectReader;
-import org.apache.tika.exception.TikaException;
 import org.apache.tika.parser.txt.CharsetDetector;
 
 import java.io.*;
@@ -11,11 +9,7 @@ import java.math.BigInteger;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
-import java.util.function.Function;
-
 import static com.yilail.constant.GlobalConstant.*;
 
 /**
@@ -29,41 +23,85 @@ public class FileUtil {
      * @param filePath 文件路径
      */
     public static BigInteger readAndHandleFile(String filePath, int chunkSize) throws IOException {
-        char[] buffer = new char[BUFFER_SIZE];
+        byte[] buffer = new byte[BUFFER_SIZE];
         List<BigInteger> fingerprints = new ArrayList<>();
-        StringBuilder carryOver = new StringBuilder();
+        ByteArrayOutputStream carryOver = new ByteArrayOutputStream();
         // 检测文件编码
         Charset charset = detectCharset(filePath);
-        if (charset == null) {
-            // 默认使用 UTF-8 编码
-            charset = StandardCharsets.UTF_8;
+        if (charset != null && !CHARSET.equals(charset.toString())) {
+            System.out.println("文件编码为：" + charset + "要求文件为utf-8编码");
+            return null;
         }
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(filePath), charset))) {
-            int charsRead;
-            while ((charsRead = reader.read(buffer)) != -1) {
-                String chunk = carryOver.toString() + new String(buffer, 0, charsRead);
-                // 清空 carryOver
-                carryOver.setLength(0);
-                int lastValidIndex = findLastValidUTF8Boundary(chunk);
-                if (lastValidIndex < chunk.length()) {
-                    carryOver.append(chunk.substring(lastValidIndex));
-                    chunk = chunk.substring(0, lastValidIndex);
+        try (InputStream in = new FileInputStream(filePath)) {
+            int bytesRead;
+            while ((bytesRead = in.read(buffer)) != -1) {
+                // 合并遗留字节与新读取的字节
+                byte[] combined = combineBytes(carryOver.toByteArray(), buffer, bytesRead);
+                carryOver.reset();
+                // 寻找最后一个完整的UTF-8字符边界
+                int splitPos = findLastValidUtf8Boundary(combined);
+                if (splitPos < combined.length) {
+                    carryOver.write(combined, splitPos, combined.length - splitPos);
                 }
-                if (!chunk.isEmpty()) {
-                    // 使用 charset 将 chunk 转换为 UTF-8
-                    String utf8Chunk = new String(chunk.getBytes(charset), StandardCharsets.UTF_8);
-                    fingerprints.add(SimHashUtil.simHash(utf8Chunk, chunkSize));
+                // 处理有效字节段
+                if (splitPos > 0) {
+                    String chunk = new String(combined, 0, splitPos, StandardCharsets.UTF_8);
+                    fingerprints.add(SimHashUtil.simHash(chunk, chunkSize));
                 }
             }
-            if (!carryOver.isEmpty()) {
-                // 使用 charset 将剩余的 carryOver 转换为 UTF-8
-                String utf8CarryOver = new String(carryOver.toString().getBytes(charset), StandardCharsets.UTF_8);
-                fingerprints.add(SimHashUtil.simHash(utf8CarryOver, chunkSize));
+            // 处理剩余字节
+            if (carryOver.size() > 0) {
+                throw new IOException("文件包含不完整的UTF-8字符序列");
             }
-        } catch (IOException e) {
-            throw new RuntimeException("Error processing file: " + e.getMessage(), e);
         }
         return SimHashUtil.mergeSimHashes(fingerprints);
+    }
+
+    /**
+     *  合并字节数组
+     * @param carryOver 遗留字节
+     * @param buffer 新读取的字节
+     * @param bytesRead 新读取的字节数
+     * @return 合并后的字节数组
+     */
+    private static byte[] combineBytes(byte[] carryOver, byte[] buffer, int bytesRead) {
+        byte[] combined = new byte[carryOver.length + bytesRead];
+        System.arraycopy(carryOver, 0, combined, 0, carryOver.length);
+        System.arraycopy(buffer, 0, combined, carryOver.length, bytesRead);
+        return combined;
+    }
+
+    /**
+     * 查找最后一个完整的UTF-8字符边界
+     * @param bytes 字节数组
+     * @return 最后一个完整的UTF-8字符边界的位置
+     */
+    private static int findLastValidUtf8Boundary(byte[] bytes) {
+        int pos = bytes.length - 1;
+        while (pos >= 0) {
+            // 判断当前字节是否为UTF-8字符的起始字节
+            if ((bytes[pos] & 0xC0) != 0x80) {
+                int expectedLength;
+                byte b = bytes[pos];
+                if ((b & 0x80) == 0x00) {
+                    expectedLength = 1;
+                } else if ((b & 0xE0) == 0xC0) {
+                    expectedLength = 2;
+                } else if ((b & 0xF0) == 0xE0) {
+                    expectedLength = 3;
+                } else if ((b & 0xF8) == 0xF0) {
+                    expectedLength = 4;
+                } else {
+                    return pos;
+                }
+                // 检查后续字节是否足够
+                if (pos + expectedLength <= bytes.length) {
+                    return pos + expectedLength;
+                }
+            }
+            pos--;
+        }
+        return 0;
     }
 
     /**
@@ -87,27 +125,6 @@ public class FileUtil {
     }
 
     /**
-     * 找到最后一个有效的 UTF-8 边界
-     * @param s 字符串
-     * @return 边界索引
-     */
-    private static int findLastValidUTF8Boundary(String s) {
-        int len = s.length();
-        for (int i = len - 1; i >= 0; i--) {
-            char c = s.charAt(i);
-            // 代理对（Surrogate Pair）检查
-            if ((c & 0xF800) == 0xD800) {
-                return i - 1;
-            }
-            // ASCII范围
-            if ((c & 0xFF00) == 0) {
-                return i + 1;
-            }
-        }
-        return 0;
-    }
-
-    /**
      * 比较两篇文章
      * @param originArticle 原始文章
      * @param targetArticle 目标文章
@@ -116,6 +133,9 @@ public class FileUtil {
     public static double compareArticle(String originArticle, String targetArticle, int chunkSize) throws IOException {
         BigInteger simhash1 = readAndHandleFile(originArticle, chunkSize);
         BigInteger simhash2 = readAndHandleFile(targetArticle, chunkSize);
+        if (simhash1 == null || simhash2 == null) {
+            return 0.0;
+        }
         int hammingDistance = SimHashUtil.hammingDistance(simhash1, simhash2);
         return 1 - (double) hammingDistance / HASH_BITS;
     }
