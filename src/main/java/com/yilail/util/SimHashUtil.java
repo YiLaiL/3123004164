@@ -4,6 +4,7 @@ import java.math.BigInteger;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static com.yilail.constant.GlobalConstant.HASH_BITS;
 
@@ -20,7 +21,7 @@ public class SimHashUtil {
      * @param chunkSize 词语分块大小
      * @return 指纹
      */
-    public static BigInteger simHash(String text,int chunkSize) {
+    public static BigInteger simHash(String text, int chunkSize) {
         List<List<String>> wordLists = FileUtil.jiebaWordSegmentation(text, chunkSize);
         int[] hashBits = new int[HASH_BITS];
         wordLists.forEach(words -> {
