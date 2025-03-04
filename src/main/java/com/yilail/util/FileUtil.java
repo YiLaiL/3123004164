@@ -13,6 +13,7 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 import static com.yilail.constant.GlobalConstant.*;
 
@@ -164,9 +165,10 @@ public class FileUtil {
      * @param article 文章
      */
     public static List<List<String>> hanlpWordSegmentation(String article, int chunkSize) {
+        article = article.replaceAll("\r\n", "");
         // 分词
         List<Term> segmentedWords = StandardTokenizer.segment(article);
-        // 使用 removeIf 和 lambda 表达式去除停用词
+        // 去除停用词
         segmentedWords.removeIf(term -> GlobalData.getStopWords().contains(term.word));
         // 替换同义词
         List<String> replacedText = new ArrayList<>();
@@ -177,7 +179,6 @@ public class FileUtil {
                     synonymItem.synonymList.get(0).realWord :
                     word);
         }
-        System.out.println(replacedText);
         return chunkWords(replacedText, chunkSize);
     }
 }
