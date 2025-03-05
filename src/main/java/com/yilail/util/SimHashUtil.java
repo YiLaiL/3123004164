@@ -16,12 +16,10 @@ public class SimHashUtil {
 
     /**
      * 计算simhash值生成指纹
-     * @param text 文本内容
-     * @param chunkSize 词语分块大小
+     * @param wordLists 词语列表
      * @return 指纹
      */
-    public static BigInteger simHash(String text, int chunkSize) {
-        List<List<String>> wordLists = FileUtil.hanlpWordSegmentation(text, chunkSize);
+    public static BigInteger simHash(List<List<String>> wordLists) {
         int[] hashBits = new int[HASH_BITS];
         wordLists.forEach(words -> {
             // 计算词频权重
@@ -42,7 +40,6 @@ public class SimHashUtil {
                 }
             }
         });
-
         // 生成最终指纹
         BigInteger fingerprint = BigInteger.ZERO;
         for (int i = 0; i < HASH_BITS; i++) {

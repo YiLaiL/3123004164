@@ -1,6 +1,5 @@
 package com.yilail;
 
-import com.yilail.util.FileUtil;
 
 import java.io.*;
 
@@ -15,7 +14,12 @@ public class Main {
         //test1_Origin.docx
         //新建 文本文档.txt
         //新建 文本文档 (2).txt
-        String targetDocumentPath = "C:\\Users\\86159\\Desktop\\新建 文本文档 (4).txt";
-        System.out.println("相似度："+FileUtil.compareArticle(originalDocumentPath,targetDocumentPath,ACCURATE_CHUNK_SIZE)*100+"%");
+        String targetDocumentPath = "C:\\Users\\86159\\Desktop\\新建 文本文档 (2).txt";
+        Article article1=new Article(originalDocumentPath);
+        Article article2=new Article(targetDocumentPath);
+//        for (int i = 0; i < 10000; i++) {
+//            Article.compareArticle(article1,article2,ACCURATE_CHUNK_SIZE);
+//        }
+        System.out.println("相似度："+Article.compareArticle(article1,article2,ACCURATE_CHUNK_SIZE)*100+"%");
     }
 }

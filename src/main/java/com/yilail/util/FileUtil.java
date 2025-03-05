@@ -4,6 +4,7 @@ import com.hankcs.hanlp.dictionary.CoreSynonymDictionary;
 import com.hankcs.hanlp.dictionary.common.CommonSynonymDictionary;
 import com.hankcs.hanlp.seg.common.Term;
 import com.hankcs.hanlp.tokenizer.StandardTokenizer;
+import com.yilail.Article;
 import com.yilail.GlobalData;
 import org.apache.tika.parser.txt.CharsetDetector;
 
@@ -25,21 +26,26 @@ import static com.yilail.constant.GlobalConstant.*;
 public class FileUtil {
     /**
      * 分段读取文件并处理
-     * @param filePath 文件路径
+     *
+     * @param article   文章对象
+     * @param chunkSize 分块大小
+     * @return 指纹
      */
-    public static BigInteger readAndHandleFile(String filePath, int chunkSize) throws IOException {
+    public static List<BigInteger> readAndHandleFile(Article article, int chunkSize) throws IOException {
         byte[] buffer = new byte[BUFFER_SIZE];
         List<BigInteger> fingerprints = new ArrayList<>();
         ByteArrayOutputStream carryOver = new ByteArrayOutputStream();
         // 检测文件编码
-        Charset charset = detectCharset(filePath);
-        if (charset != null && !CHARSET.equals(charset.toString())) {
-            System.out.println("文件编码为：" + charset + "要求文件为utf-8编码");
-            return null;
-        }
-        try (InputStream in = new FileInputStream(filePath)) {
+        FileInputStream in = article.getFis();
+        BufferedInputStream bis = new BufferedInputStream(in);
+        try {
+            article.setCharset(detectCharset(bis));
+            if (article.getCharset() != null && !CHARSET.equals(article.getCharset().toString())) {
+                System.out.println("文件编码为：" + article.getCharset() + "要求文件为utf-8编码");
+                return null;
+            }
             int bytesRead;
-            while ((bytesRead = in.read(buffer)) != -1) {
+            while ((bytesRead = bis.read(buffer)) != -1) {
                 // 合并遗留字节与新读取的字节
                 byte[] combined = combineBytes(carryOver.toByteArray(), buffer, bytesRead);
                 carryOver.reset();
@@ -51,21 +57,27 @@ public class FileUtil {
                 // 处理有效字节段
                 if (splitPos > 0) {
                     String chunk = new String(combined, 0, splitPos, StandardCharsets.UTF_8);
-                    fingerprints.add(SimHashUtil.simHash(chunk, chunkSize));
+                    fingerprints.add(SimHashUtil.simHash(hanlpWordSegmentation(chunk, chunkSize)));
                 }
             }
             // 处理剩余字节
             if (carryOver.size() > 0) {
                 throw new IOException("文件包含不完整的UTF-8字符序列");
             }
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }finally {
+            article.getFis().close();
+            bis.close();
         }
-        return SimHashUtil.mergeSimHashes(fingerprints);
+        return fingerprints;
     }
 
     /**
-     *  合并字节数组
+     * 合并字节数组
+     *
      * @param carryOver 遗留字节
-     * @param buffer 新读取的字节
+     * @param buffer    新读取的字节
      * @param bytesRead 新读取的字节数
      * @return 合并后的字节数组
      */
@@ -111,47 +123,33 @@ public class FileUtil {
 
     /**
      * 检测文件编码
-     * @param filePath 文件路径
+     *
+     * @param bis 输入流
      * @return 编码
      */
-    private static Charset detectCharset(String filePath) {
-        try (FileInputStream fis = new FileInputStream(filePath);
-             BufferedInputStream bis = new BufferedInputStream(fis)) {
-            CharsetDetector detector = new CharsetDetector();
+    private static Charset detectCharset(BufferedInputStream bis) {
+        CharsetDetector detector = new CharsetDetector();
+        try {
             detector.setText(bis);
-            org.apache.tika.parser.txt.CharsetMatch match = detector.detect();
-            if (match != null) {
-                return Charset.forName(match.getName());
-            }
-        } catch (Exception e) {
-            System.err.println("Error detecting charset: " + e.getMessage());
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        org.apache.tika.parser.txt.CharsetMatch match = detector.detect();
+        if (match != null) {
+            return Charset.forName(match.getName());
         }
         return null;
     }
 
-    /**
-     * 比较两篇文章
-     * @param originArticle 原始文章
-     * @param targetArticle 目标文章
-     * @param chunkSize 分块大小
-     */
-    public static double compareArticle(String originArticle, String targetArticle, int chunkSize) throws IOException {
-        BigInteger simhash2 = readAndHandleFile(targetArticle, chunkSize);
-        BigInteger simhash1 = readAndHandleFile(originArticle, chunkSize);
-        if (simhash1 == null || simhash2 == null) {
-            return 0.0;
-        }
-        int hammingDistance = SimHashUtil.hammingDistance(simhash1, simhash2);
-        return 1 - (double) hammingDistance / HASH_BITS;
-    }
 
     /**
      * 将词语列表分割成若干个chunk
+     *
      * @param words     词语列表
      * @param chunkSize 分块大小
      * @return 分块列表
      */
-    public static List<List<String>> chunkWords(List<String> words, int chunkSize) {
+    private static List<List<String>> chunkWords(List<String> words, int chunkSize) {
         List<List<String>> chunks = new ArrayList<>();
         for (int i = 0; i < words.size(); i += chunkSize) {
             int end = Math.min(words.size(), i + chunkSize);
@@ -162,9 +160,10 @@ public class FileUtil {
 
     /**
      * 对文章进行分词
+     *
      * @param article 文章
      */
-    public static List<List<String>> hanlpWordSegmentation(String article, int chunkSize) {
+    private static List<List<String>> hanlpWordSegmentation(String article, int chunkSize) {
         article = article.replaceAll("\r\n", "");
         // 分词
         List<Term> segmentedWords = StandardTokenizer.segment(article);
